@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 
 # CELL CLASS
 class Cell:
-    def __init__(self, row, col, is_white, clue_number=list(), is_beginning=None):
+    def __init__(self, row, col, is_white, clue_number=None, is_beginning=None):
         """
         Initialize a crossword cell.
 
@@ -19,8 +19,12 @@ class Cell:
         self.col = col
         self.is_white = is_white
         # self.value = value
-        self.is_beginning = None
-        self.clue_number = clue_number
+        self.is_beginning = is_beginning
+        # Ensure each Cell gets its own clue list (avoid shared mutable default)
+        if clue_number is None:
+            self.clue_number = []
+        else: 
+            self.clue_number = clue_number
         self.is_across = None
         self.is_down = None
         # self.across_word = None   # Reference to the Word object going across
@@ -34,9 +38,13 @@ class Cell:
     def is_head(self):
         return self.is_beginning
     
+    # Cell, int
     def add_clue(self, num):
         self.clue_number.append(num)
-    
+
+    def add_clues(self, nums):
+        self.clue_number + nums
+
     def set_down(self):
         self.is_down = True
     
@@ -44,17 +52,17 @@ class Cell:
         self.is_across = True
     
     def getLeft(self):
-        return self.row * CELL_SIZE + 1
+        return self.col * CELL_SIZE + 1
     
     def getTop(self):
-        return self.col * CELL_SIZE + 1
+        return self.row * CELL_SIZE + 1
 
     def __repr__(self):
         """Readable string for debugging."""
-        if self.is_black:
-            return f"."
+        if self.is_white:
+            return f"{"H " if self.is_beginning else ''}{" ".join(self.clue_number)}"
         else:
-            return f"{self.clue_number}{'a' if self.is_across else ''}{'d' if self.is_down else ''}"
+            return f"."
 
 
 # CONSTANT
@@ -242,50 +250,57 @@ def top_left_to_row_col(top, left):
 # Populate cell matrix with Cell data
 def create_cell_matrix(cells, width, height):
     # cell_matrix = [[0 for x in range(width)] for y in range(height)]
+    # left is the col, top is the row
     cell_matrix = [[0 for x in range(width + 1)] for y in range(height + 1)]
     for c in cells:
         style = c.get("style", "")
         left, top = extract_left_top(style)
         l, t = convert_left_top_to_int(left, top)
-        row, col = top_left_to_row_col(l, t)
+        col, row = top_left_to_row_col(l, t)
         is_white = is_white_cell(style)
+        print(f"row: {row}, col: {col}, {is_white}")
 
         cell_matrix[row][col] = Cell(row, col, is_white)
+
     return cell_matrix
 
 # Update cell matrix with data of start of words
 def number_cell_matrix(cell_matrix, numbers):
     # PRE: All numbered cells are white and cell already exists in cell matrix
+    heads = []
     for num in numbers:
-        number = num.text.strip()
         style = num.get("style", "")
-        top, left = extract_left_top(style)
-        t, l = convert_left_top_to_int(top, left)
+        left, top = extract_left_top(style)
+        number = num.text.strip()
+        l, t = convert_left_top_to_int(left, top)
         row, col = top_left_to_row_col(t, l)
         cur = cell_matrix[row][col]
+        max_row = len(cell_matrix) - 1
+        max_col = len(cell_matrix[0]) - 1
 
-        Cell.add_clue(cur, number)
- 
-    return cell_matrix
+        # Add across and down information
+        if (
+            row == 0 or 
+            col == max_col or 
+            (row < max_row - 1 and (Cell.is_black(cell_matrix[row-1][col])) and not Cell.is_black(cell_matrix[row + 1][col])) # Cell.is_black(cell_matrix[row][col+1]) and Cell.is_black(cell_matrix[row][col-1]))
+            ):
+            cur.is_down = True
+            Cell.add_clue(cur, f"{number}d")
 
-# def directional_cell_matrix(cell_matrix):
-#     # first row:
-#     max_col = len(cell_matrix[0] - 1)
-#     max_row = len(cell_matrix - 1)
-#     for col in range (0, max_col):
-#         clue = isinstance(cell_matrix[0][col], int)
-#         down = False
-#         across = True
-#         if (cell_matrix[0][col] & clue):
-#             if (col < max_col - 1): 
-#                 across = bool(cell_matrix[0][col+1])
-#             else()
+        if (
+            col == 0 or
+            row == max_row or
+            (col < max_col - 1 and (Cell.is_black(cell_matrix[row][col - 1])) and not Cell.is_black(cell_matrix[row][col+1])) # Cell.is_black(cell_matrix[row+1][col]) and Cell.is_black(cell_matrix[row][col-1]))
+            ):
+            cur.is_across = True
+            Cell.add_clue(cur, f"{number}a")
+    
+        # Cell.add_clue(cur, f"{number}{'a' if cur.is_across else ''}{'d' if cur.is_down else ''}")
+        cur.is_beginning = True
+        cur.is_white = True
+        heads.append(cur)
 
-#     for row in range(1, len(cell_matrix)):
-#         for col in len(cell_matrix[row]):
-#             if cell_matrix[row][col]:
-
-#     return cell_matrix
+    return cell_matrix, heads
 
 # Update cell matrix to include clue number and direction of word
 # i.e. if a cell belongs to a 'down' or an 'across' word
@@ -293,37 +308,112 @@ def number_cell_matrix(cell_matrix, numbers):
 # Search cell matrix for 'beginning of words' and follow in the direction of
 # until it reaches a black cell or the end of the crossword and label with 
 # clue number and direction
-def directional_cell_matrix(cell_matrix, width, height):
-    for row in range(width + 1):
-        for col in range(height + 1):
-            cur = cell_matrix[row][col]
-            clue_number = cur.clue_number
+# def directional_cell_matrix(cell_matrix):
+#     # Use actual matrix dimensions to iterate safely
+#     rows = len(cell_matrix)
+#     cols = len(cell_matrix[0]) if rows > 0 else 0
 
-            # PRE: Heads of words can only have one clue number 
-            # (crossword cells never contain more than one number - they share the same number)
-            # However cells can belong to more than one clue word
-            if Cell.is_head(cur):
-                curr = cell_matrix[row][col]
+#     for r in range(rows):
+#         for c in range(cols):
+#             cur = cell_matrix[r][c]
+#             # Skip empty slots or non-Cell entries
+#             if not isinstance(cur, Cell):
+#                 continue
 
-                # While loops:
-                # Iteratively assigns clue number and direction until reaches
-                # a black space or the boundary
+#             # Skip black cells
+#             if Cell.is_black(cur):
+#                 continue
 
-                # Across
-                while (curr.is_white and col < width):
-                    col += 1
-                    curr = cell_matrix[row][col]
-                    Cell.add_clue(curr, clue_number)
-                    Cell.set_across(curr)
-                
-                # Down
-                while (curr.is_white and row < height):
-                    row += 1
-                    curr = cell_matrix[row][col]
-                    Cell.add_clue(curr, clue_number)
-                    Cell.set_down(curr)
+#             # If this cell is a head, propagate its clue string to the word
+#             if cur.is_head():
+#                 head_clue = cur.clue_number[0] if cur.clue_number else None
+
+#                 # Across: move right until a non-white cell or boundary
+#                 # Will only be across if 
+#                 # - left cell is black / does not exist
+#                 # - right cell is white
+#                 cc = c + 1
+#                 while cc < cols and isinstance(cell_matrix[r][cc], Cell) and cell_matrix[r][cc].is_white:
+#                     if head_clue is not None:
+#                         cell_matrix[r][cc].add_clue(head_clue)
+#                     cell_matrix[r][cc].set_across()
+#                     cc += 1
+
+#                 # Down: move down until a non-white cell or boundary
+#                 rr = r + 1
+#                 while rr < rows and isinstance(cell_matrix[rr][c], Cell) and cell_matrix[rr][c].is_white:
+#                     if head_clue is not None:
+#                         cell_matrix[rr][c].add_clue(head_clue)
+#                     cell_matrix[rr][c].set_down()
+#                     rr += 1
+
+#     return cell_matrix
+
+def directional_cell_matrix(cell_matrix, width, height, heads):
+    max_row = len(cell_matrix) - 1
+    max_col = len(cell_matrix[0]) - 1
+    # every cell in heads is a beginning
+    for head in heads:
+        for clue in head.clue_number:
+            if 'd' in clue:
+                curr_row = head.row + 1
+                if curr_row < max_row:
+                    curr = cell_matrix[curr_row][head.col]
+                    while (not Cell.is_black(curr) and curr_row <= max_row):
+                        curr = cell_matrix[curr_row][head.col]
+                        if clue not in curr.clue_number:
+                            curr.add_clue(clue)
+                        curr_row += 1
+            
+            if 'a' in clue:
+                curr_col = head.col + 1
+                if curr_col < max_col:
+                    curr = cell_matrix[head.row][curr_col]
+                    while (not Cell.is_black(curr) and curr_col <= max_col):
+                        curr = cell_matrix[head.row][curr_col]
+                        if clue not in curr.clue_number:
+                            curr.add_clue(clue)
+                        curr_col += 1
 
     return cell_matrix
+
+
+    # for row in range(width + 1):
+    #     for col in range(height + 1):
+    #         cur = cell_matrix[row][col]
+    #         clue_numbers = cur.clue_number
+
+    #         # PRE: Heads of words can only have one clue number 
+    #         # (crossword cells never contain more than one number - they share the same number)??
+    #         # However cells can belong to more than one clue word
+    #         if Cell.is_head(cur):
+    #             curr = cell_matrix[row][col]
+
+    #             # While loops:
+    #             # Iteratively assigns clue number and direction until reaches
+    #             # a black space or the boundary
+
+    #             # Across
+    #             while (curr.is_white and col < width):
+    #                 col += 1
+    #                 curr = cell_matrix[row][col]
+    #                 Cell.add_clues(curr, clue_numbers)
+    #                 Cell.set_across(curr)
+                
+    #             # Down
+    #             while (curr.is_white and row < height):
+    #                 row += 1
+    #                 curr = cell_matrix[row][col]
+    #                 Cell.add_clues(curr, clue_numbers)
+    #                 Cell.set_down(curr)
+
+def print_cell_matrix(cell_matrix, width=9):
+    for row in cell_matrix:
+        row_str = ""
+        for cell in row:
+            row_str += str(cell).ljust(width) + " | "
+        print(row_str)
+
 
 # Parse cells according to class
 def generate_cells(cells, lines, numbers, directional_cell_matrix):
@@ -350,26 +440,18 @@ def generate_cells(cells, lines, numbers, directional_cell_matrix):
                      f'<div class="bk" style="left:{Cell.getLeft(curCell)};top:{Cell.getTop(curCell)};"></div>'
                 )
 
-    for line in lines:
-        cls = d.get("class", [])
-        style = d.get("style", "")
-
-        # Only care about elements with left/top position
-        if "left:" not in style or "top:" not in style:
-            continue
+    for num in numbers:
+        style = num.get("style", "")
 
         left, top = extract_left_top(style)
 
-        # Clue numbers in cells
-        if "nu" in cls:
-            number = d.text.strip()
-            cell_output.append(
-                f'<div class="nu" style="left:{left};top:{top};color:000000;text-align:left">{number}</div>'
-            )
-            continue
+        number = num.text.strip()
+        cell_output.append(
+            f'<div class="nu" style="left:{left};top:{top};color:000000;text-align:left">{number}</div>'
+        )
 
-        # Default - we only change bk and nu
-        cell_output.append(str(d))
+    # Default - we only change bk and nu
+    cell_output.extend(lines)
 
     cell_output.append(f'</div></div></div>')
     return cell_output
@@ -433,7 +515,7 @@ def main():
 
     cells = soup.select("div.bk")
     numbers = soup.select("div.nu")
-    lines = soup.select("div.hr, div.vr")
+    lines = (str(tag) for tag in soup.select("div.hr, div.vr"))
     left, top = extract_left_top(cells[-1].get("style", ""))
 
     # Crossword's width and height
@@ -442,10 +524,11 @@ def main():
     width, height = top_left_to_row_col(left_val, top_val)
 
     cell_matrix = create_cell_matrix(cells, width, height)
-    number_cell_matrix(cell_matrix, numbers)
-    directional_cell_matrix(cell_matrix, width, height)
+    numbered_cell_matrix, heads = number_cell_matrix(cell_matrix, numbers)
 
-    print(cell_matrix)
+    dir_cell_matrix = directional_cell_matrix(numbered_cell_matrix, width, height, heads)
+    print_cell_matrix(dir_cell_matrix)
+
 
     output = []
 
@@ -457,7 +540,7 @@ def main():
 
     # Crosswsord grid
     output.append(cell_preamble)
-    output.extend(generate_cells(cells, lines, numbers, cell_matrix))
+    output.extend(generate_cells(cells, lines, numbers, dir_cell_matrix))
 
     # Down clues
     output.extend(down_clues_generator(down_clues))
