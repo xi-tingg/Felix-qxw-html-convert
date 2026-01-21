@@ -179,7 +179,7 @@ function genNextCell(allCells, cell, curDirection) {
     for (let c of rowCells) {
       if (parseInt(c.style.left) > thisLeft) return c;
     }
-  } else if (direction === 'down') {
+  } else if (curDirection === 'down') {
     // Find next cell in same column, below
     const colCells = allCells
       .filter(c => Math.abs(parseInt(c.style.left) - thisLeft) < 5)
@@ -193,6 +193,39 @@ function genNextCell(allCells, cell, curDirection) {
   return null;
 }
 
+function genPrevCell(allCells, cell, direction) {
+  const thisLeft = parseInt(cell.style.left);
+  const thisTop = parseInt(cell.style.top);
+
+  if (direction === 'across') {
+    // same row, to the left
+    const rowCells = allCells
+      .filter(c => Math.abs(parseInt(c.style.top) - thisTop) < 5)
+      .sort((a, b) => parseInt(a.style.left) - parseInt(b.style.left));
+
+    for (let i = rowCells.length - 1; i >= 0; i--) {
+      if (parseInt(rowCells[i].style.left) < thisLeft) {
+        return rowCells[i];
+      }
+    }
+  }
+
+  if (direction === 'down') {
+    // same column, above
+    const colCells = allCells
+      .filter(c => Math.abs(parseInt(c.style.left) - thisLeft) < 5)
+      .sort((a, b) => parseInt(a.style.top) - parseInt(b.style.top));
+
+    for (let i = colCells.length - 1; i >= 0; i--) {
+      if (parseInt(colCells[i].style.top) < thisTop) {
+        return colCells[i];
+      }
+    }
+  }
+  return null;
+}
+
+
 // Get all input cells and set up event listeners
 const cells = document.querySelectorAll('input.cell');
 cells.forEach((cell, index) => {
@@ -205,8 +238,26 @@ cells.forEach((cell, index) => {
   
   // Save input to memory and auto-uppercase
   cell.addEventListener('input', (e) => {
-    e.target.value = e.target.value.toUpperCase();
-    cellData[key] = e.target.value;
+    e.target.value = e.target.value.toUpperCase(); // optional uppercase
+
+    // only move if the cell is filled
+    if (cell.value.length >= cell.maxLength) {
+      const allCells = Array.from(cells);
+      const i = allCells.indexOf(cell);
+      let nextCell = null;
+
+      if (currentDirection === 'across') {
+        nextCell = allCells[i + 1]; // move right
+      } else { // down
+        const thisLeft = parseInt(cell.style.left);
+        const thisTop = parseInt(cell.style.top);
+        nextCell = allCells.find(c =>
+          parseInt(c.style.left) === thisLeft && parseInt(c.style.top) > thisTop
+        );
+      }
+
+      if (nextCell) nextCell.focus();
+    }
   });
 
   cell.addEventListener('focus', () => {
@@ -243,6 +294,7 @@ cells.forEach((cell, index) => {
   
   // Navigate between cells with arrow keys
   cell.addEventListener('keydown', (e) => {
+    e.target.value = e.target.value.toUpperCase();
     const allCells = Array.from(cells);
     const currentIndex = allCells.indexOf(cell);
     
@@ -261,37 +313,24 @@ cells.forEach((cell, index) => {
         nextCell = genNextCell(allCells, cell, currentDirection);
         break
       case 'ArrowRight':
-        nextCell = allCells[currentIndex + 1];
+        nextCell = genNextCell(allCells, cell, 'across');
         break;
       case 'ArrowLeft':
-        nextCell = allCells[currentIndex - 1];
+        nextCell = genPrevCell(allCells, cell, 'across');
         break;
       case 'ArrowDown':
-        // Find cell roughly below (36px down)
-        const belowCells = allCells.filter(c => {
-          const thisLeft = parseInt(cell.style.left);
-          const thisTop = parseInt(cell.style.top);
-          const cLeft = parseInt(c.style.left);
-          const cTop = parseInt(c.style.top);
-          return Math.abs(cLeft - thisLeft) < 5 && cTop > thisTop;
-        });
-        nextCell = belowCells[0];
-
+        nextCell = genNextCell(allCells, cell, 'down');
         break;
       case 'ArrowUp':
-        // Find cell roughly above
-        const aboveCells = allCells.filter(c => {
-          const thisLeft = parseInt(cell.style.left);
-          const thisTop = parseInt(cell.style.top);
-          const cLeft = parseInt(c.style.left);
-          const cTop = parseInt(c.style.top);
-          return Math.abs(cLeft - thisLeft) < 5 && cTop < thisTop;
-        });
-        nextCell = aboveCells[aboveCells.length - 1];
+        nextCell = genPrevCell(allCells, cell, 'down');
         break;
-    }
+      case 'Delete':
+      case 'Backspace':
+        cell.value = ''
+        nextCell = genPrevCell(allCells, cell, currentDirection)
+      }
     
-    if (nextCell && ['Enter', 'ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+    if (nextCell && ['Enter', 'ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown', 'Delete', 'Backspace'].includes(e.key)) {
       e.preventDefault();
       nextCell.focus();
     }
