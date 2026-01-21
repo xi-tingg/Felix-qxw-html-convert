@@ -258,7 +258,6 @@ def create_cell_matrix(cells, width, height):
         l, t = convert_left_top_to_int(left, top)
         col, row = top_left_to_row_col(l, t)
         is_white = is_white_cell(style)
-        print(f"row: {row}, col: {col}, {is_white}")
 
         cell_matrix[row][col] = Cell(row, col, is_white)
 
@@ -419,12 +418,13 @@ def print_cell_matrix(cell_matrix, width=9):
 def generate_cells(cells, lines, numbers, directional_cell_matrix):
     cell_output = []
 
-    row_length = len(directional_cell_matrix) - 1
-    column_length = len(directional_cell_matrix[0]) - 1
+    row_length = len(directional_cell_matrix)
+    column_length = len(directional_cell_matrix[0])
 
     for row in range(row_length):
         for column in range(column_length):
             curCell = directional_cell_matrix[row][column]
+            print(f"row: {row}, col: {column}, {curCell.is_white}")
             if curCell.is_white:
                 clues = ",".join(curCell.clue_number)
                 d = []
