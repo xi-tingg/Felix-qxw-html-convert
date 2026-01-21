@@ -27,6 +27,8 @@ class Cell:
             self.clue_number = clue_number
         self.is_across = None
         self.is_down = None
+        self.next_across_clue = None
+        self.next_down_clue = None
         # self.across_word = None   # Reference to the Word object going across
         # self.down_word = None     # Reference to the Word object going down
         # self.visited = False      # Useful for solving algorithms
@@ -60,7 +62,7 @@ class Cell:
     def __repr__(self):
         """Readable string for debugging."""
         if self.is_white:
-            return f"{"H " if self.is_beginning else ''}{" ".join(self.clue_number)}"
+            return f"{"H " if self.is_beginning else ''}{" ".join(self.clue_number)}, {self.next_across_clue} {self.next_down_clue}"
         else:
             return f"."
 
@@ -142,6 +144,10 @@ input.cell:focus {
     width: 500px;
 }
 
+.cell.active {
+  background-color: #ffe58a;
+}
+
 </style>
 </head>
 <body>
@@ -158,6 +164,35 @@ javascript_postamble = r"""<script>
 // Store data in memory instead of localStorage
 const cellData = {};
 
+// Set initial current direction
+let currentDirection = 'across';
+
+function genNextCell(allCells, cell, curDirection) {
+  const thisLeft = parseInt(cell.style.left);
+  const thisTop = parseInt(cell.style.top);
+  
+  if (curDirection === 'across') {
+    const rowCells = allCells
+      .filter(c => Math.abs(parseInt(c.style.top) - thisTop) < 5)
+      .sort((a, b) => parseInt(a.style.left) - parseInt(b.style.left));
+
+    for (let c of rowCells) {
+      if (parseInt(c.style.left) > thisLeft) return c;
+    }
+  } else if (direction === 'down') {
+    // Find next cell in same column, below
+    const colCells = allCells
+      .filter(c => Math.abs(parseInt(c.style.left) - thisLeft) < 5)
+      .sort((a, b) => parseInt(a.style.top) - parseInt(b.style.top));
+
+    for (let c of colCells) {
+      if (parseInt(c.style.top) > thisTop) return c;
+    }
+  }
+
+  return null;
+}
+
 // Get all input cells and set up event listeners
 const cells = document.querySelectorAll('input.cell');
 cells.forEach((cell, index) => {
@@ -173,6 +208,38 @@ cells.forEach((cell, index) => {
     e.target.value = e.target.value.toUpperCase();
     cellData[key] = e.target.value;
   });
+
+  cell.addEventListener('focus', () => {
+    cells.forEach(c => c.classList.remove('active'));
+
+    const clues = cell.dataset.clue.split(',').map(s => s.trim());
+
+    // If current direction not available, auto-switch
+    if (
+      currentDirection === 'across' &&
+      !clues.some(c => c.endsWith('a'))
+    ) {
+      currentDirection = 'down';
+    }
+    if (
+      currentDirection === 'down' &&
+      !clues.some(c => c.endsWith('d'))
+    ) {
+      currentDirection = 'across';
+    }
+
+    const activeClue =
+      currentDirection === 'down'
+        ? clues.find(c => c.endsWith('d'))
+        : clues.find(c => c.endsWith('a'));
+
+    cells.forEach(c => {
+      const cClues = c.dataset.clue.split(',').map(s => s.trim());
+      if (cClues.includes(activeClue)) {
+        c.classList.add('active');
+      }
+    });
+  });
   
   // Navigate between cells with arrow keys
   cell.addEventListener('keydown', (e) => {
@@ -182,6 +249,17 @@ cells.forEach((cell, index) => {
     let nextCell = null;
     
     switch(e.key) {
+      case ' ':
+        e.preventDefault();
+        currentDirection = currentDirection === 'across' ? 'down' : 'across';
+        cell.blur();
+        cell.focus(); // re-trigger highlighting
+        return;
+      
+      case 'Enter':
+        e.preventDefault();
+        nextCell = genNextCell(allCells, cell, currentDirection);
+        break
       case 'ArrowRight':
         nextCell = allCells[currentIndex + 1];
         break;
@@ -198,6 +276,7 @@ cells.forEach((cell, index) => {
           return Math.abs(cLeft - thisLeft) < 5 && cTop > thisTop;
         });
         nextCell = belowCells[0];
+
         break;
       case 'ArrowUp':
         // Find cell roughly above
@@ -212,7 +291,7 @@ cells.forEach((cell, index) => {
         break;
     }
     
-    if (nextCell && ['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+    if (nextCell && ['Enter', 'ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
       e.preventDefault();
       nextCell.focus();
     }
@@ -267,6 +346,8 @@ def create_cell_matrix(cells, width, height):
 def number_cell_matrix(cell_matrix, numbers):
     # PRE: All numbered cells are white and cell already exists in cell matrix
     heads = []
+    across_clues = []
+    down_clues = []
     for num in numbers:
         style = num.get("style", "")
         left, top = extract_left_top(style)
@@ -285,6 +366,7 @@ def number_cell_matrix(cell_matrix, numbers):
             ):
             cur.is_down = True
             Cell.add_clue(cur, f"{number}d")
+            down_clues.append(int(number))
 
         if (
             col == 0 or
@@ -293,118 +375,51 @@ def number_cell_matrix(cell_matrix, numbers):
             ):
             cur.is_across = True
             Cell.add_clue(cur, f"{number}a")
+            across_clues.append(int(number))
     
-        # Cell.add_clue(cur, f"{number}{'a' if cur.is_across else ''}{'d' if cur.is_down else ''}")
         cur.is_beginning = True
         cur.is_white = True
         heads.append(cur)
 
-    return cell_matrix, heads
+    return cell_matrix, heads, sorted(across_clues), sorted(down_clues),
 
-# Update cell matrix to include clue number and direction of word
-# i.e. if a cell belongs to a 'down' or an 'across' word
-# this is for word highlighting and auto next letter
-# Search cell matrix for 'beginning of words' and follow in the direction of
-# until it reaches a black cell or the end of the crossword and label with 
-# clue number and direction
-# def directional_cell_matrix(cell_matrix):
-#     # Use actual matrix dimensions to iterate safely
-#     rows = len(cell_matrix)
-#     cols = len(cell_matrix[0]) if rows > 0 else 0
-
-#     for r in range(rows):
-#         for c in range(cols):
-#             cur = cell_matrix[r][c]
-#             # Skip empty slots or non-Cell entries
-#             if not isinstance(cur, Cell):
-#                 continue
-
-#             # Skip black cells
-#             if Cell.is_black(cur):
-#                 continue
-
-#             # If this cell is a head, propagate its clue string to the word
-#             if cur.is_head():
-#                 head_clue = cur.clue_number[0] if cur.clue_number else None
-
-#                 # Across: move right until a non-white cell or boundary
-#                 # Will only be across if 
-#                 # - left cell is black / does not exist
-#                 # - right cell is white
-#                 cc = c + 1
-#                 while cc < cols and isinstance(cell_matrix[r][cc], Cell) and cell_matrix[r][cc].is_white:
-#                     if head_clue is not None:
-#                         cell_matrix[r][cc].add_clue(head_clue)
-#                     cell_matrix[r][cc].set_across()
-#                     cc += 1
-
-#                 # Down: move down until a non-white cell or boundary
-#                 rr = r + 1
-#                 while rr < rows and isinstance(cell_matrix[rr][c], Cell) and cell_matrix[rr][c].is_white:
-#                     if head_clue is not None:
-#                         cell_matrix[rr][c].add_clue(head_clue)
-#                     cell_matrix[rr][c].set_down()
-#                     rr += 1
-
-#     return cell_matrix
-
-def directional_cell_matrix(cell_matrix, width, height, heads):
+def directional_cell_matrix(cell_matrix, heads, across_clues, down_clues):
     max_row = len(cell_matrix) - 1
     max_col = len(cell_matrix[0]) - 1
+    print(across_clues)
+    print(down_clues)
     # every cell in heads is a beginning
     for head in heads:
         for clue in head.clue_number:
             if 'd' in clue:
                 curr_row = head.row + 1
+                current_num = int(clue[:-1])
+                next_clue = next((c for c in down_clues if int(c) > current_num), None)
                 if curr_row < max_row:
                     curr = cell_matrix[curr_row][head.col]
                     while (not Cell.is_black(curr) and curr_row <= max_row):
                         curr = cell_matrix[curr_row][head.col]
                         if clue not in curr.clue_number:
                             curr.add_clue(clue)
+                        if not next_clue == None:
+                            curr.next_down_clue = f"{next_clue}d"
                         curr_row += 1
             
             if 'a' in clue:
                 curr_col = head.col + 1
+                current_num = int(clue[:-1])
+                next_clue = next((c for c in across_clues if int(c) > current_num), None)
                 if curr_col < max_col:
                     curr = cell_matrix[head.row][curr_col]
                     while (not Cell.is_black(curr) and curr_col <= max_col):
                         curr = cell_matrix[head.row][curr_col]
                         if clue not in curr.clue_number:
                             curr.add_clue(clue)
+                        if not next_clue == None:
+                            curr.next_across_clue = f"{next_clue}a"
                         curr_col += 1
 
     return cell_matrix
-
-
-    # for row in range(width + 1):
-    #     for col in range(height + 1):
-    #         cur = cell_matrix[row][col]
-    #         clue_numbers = cur.clue_number
-
-    #         # PRE: Heads of words can only have one clue number 
-    #         # (crossword cells never contain more than one number - they share the same number)??
-    #         # However cells can belong to more than one clue word
-    #         if Cell.is_head(cur):
-    #             curr = cell_matrix[row][col]
-
-    #             # While loops:
-    #             # Iteratively assigns clue number and direction until reaches
-    #             # a black space or the boundary
-
-    #             # Across
-    #             while (curr.is_white and col < width):
-    #                 col += 1
-    #                 curr = cell_matrix[row][col]
-    #                 Cell.add_clues(curr, clue_numbers)
-    #                 Cell.set_across(curr)
-                
-    #             # Down
-    #             while (curr.is_white and row < height):
-    #                 row += 1
-    #                 curr = cell_matrix[row][col]
-    #                 Cell.add_clues(curr, clue_numbers)
-    #                 Cell.set_down(curr)
 
 def print_cell_matrix(cell_matrix, width=9):
     for row in cell_matrix:
@@ -424,7 +439,6 @@ def generate_cells(cells, lines, numbers, directional_cell_matrix):
     for row in range(row_length):
         for column in range(column_length):
             curCell = directional_cell_matrix[row][column]
-            print(f"row: {row}, col: {column}, {curCell.is_white}")
             if curCell.is_white:
                 clues = ",".join(curCell.clue_number)
                 d = []
@@ -432,7 +446,7 @@ def generate_cells(cells, lines, numbers, directional_cell_matrix):
                 if curCell.is_down: d.append("down")
                 direction = ",".join(d)
                 cell_output.append(
-                    f'<input class="cell" data-clue="{clues}" data-direction="{direction}" style="left:{Cell.getLeft(curCell)};top:{Cell.getTop(curCell)};" maxlength="1">'
+                    f'<input class="cell" data-clue="{clues}" data-direction="{direction}" data-next-a-clue="{curCell.next_across_clue}" data-next-d-clue="{curCell.next_down_clue}" style="left:{Cell.getLeft(curCell)};top:{Cell.getTop(curCell)};" maxlength="1">'
                 )
             
             else: 
@@ -524,11 +538,8 @@ def main():
     width, height = top_left_to_row_col(left_val, top_val)
 
     cell_matrix = create_cell_matrix(cells, width, height)
-    numbered_cell_matrix, heads = number_cell_matrix(cell_matrix, numbers)
-
-    dir_cell_matrix = directional_cell_matrix(numbered_cell_matrix, width, height, heads)
-    print_cell_matrix(dir_cell_matrix)
-
+    numbered_cell_matrix, heads, across_clues, down_clues = number_cell_matrix(cell_matrix, numbers)
+    dir_cell_matrix = directional_cell_matrix(numbered_cell_matrix, heads, across_clues, down_clues)
 
     output = []
 
