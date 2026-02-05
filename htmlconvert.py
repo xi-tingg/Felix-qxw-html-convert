@@ -422,9 +422,18 @@ def number_cell_matrix(cell_matrix, numbers):
 
     return cell_matrix, heads, sorted(across_clues), sorted(down_clues),
 
-def directional_cell_matrix(cell_matrix, heads, across_clues, down_clues):
+def get_next_clue(curClue, list):
+      i = list.index(curClue)
+      if i == len(list) - 1:
+          return list[0]
+      else: 
+        return list[i+1]
+
+def directional_cell_matrix(cell_matrix, heads, across_clues, down_clues, labelled_across, labelled_down):
     max_row = len(cell_matrix) - 1
     max_col = len(cell_matrix[0]) - 1
+    print(down_clues)
+    print(heads)
 
     # every cell in heads is a beginning
     for head in heads:
@@ -432,29 +441,38 @@ def directional_cell_matrix(cell_matrix, heads, across_clues, down_clues):
             if 'd' in clue:
                 curr_row = head.row + 1
                 current_num = int(clue[:-1])
-                next_clue = next((c for c in down_clues if int(c) > current_num), None)
+                next_clue = get_next_clue(current_num, down_clues)
+                # For head
+                head.next_down_clue = f"{next_clue}d"
+
                 if curr_row < max_row:
                     curr = cell_matrix[curr_row][head.col]
                     while (not Cell.is_black(curr) and curr_row <= max_row):
                         curr = cell_matrix[curr_row][head.col]
                         if clue not in curr.clue_number:
-                            curr.add_clue(clue)
-                        if not next_clue == None:
-                            curr.next_down_clue = f"{next_clue}d"
+                          curr.add_clue(clue)
+                        # For all following cells
+                        curr.is_down = True
+                        curr.next_down_clue = f"{next_clue}d"
                         curr_row += 1
+                print(curr.next_down_clue)
             
             if 'a' in clue:
                 curr_col = head.col + 1
                 current_num = int(clue[:-1])
-                next_clue = next((c for c in across_clues if int(c) > current_num), None)
+                next_clue = get_next_clue(current_num, across_clues)
+                # For head
+                head.next_across_clue = f"{next_clue}a"
+
                 if curr_col < max_col:
                     curr = cell_matrix[head.row][curr_col]
                     while (not Cell.is_black(curr) and curr_col <= max_col):
                         curr = cell_matrix[head.row][curr_col]
                         if clue not in curr.clue_number:
                             curr.add_clue(clue)
-                        if not next_clue == None:
-                            curr.next_across_clue = f"{next_clue}a"
+                        # For all following cells
+                        curr.is_across = True
+                        curr.next_across_clue = f"{next_clue}a"
                         curr_col += 1
 
     return cell_matrix
@@ -466,9 +484,8 @@ def print_cell_matrix(cell_matrix, width=9):
             row_str += str(cell).ljust(width) + " | "
         print(row_str)
 
-
 # Parse cells according to class
-def generate_cells(cells, lines, numbers, directional_cell_matrix):
+def generate_cells(cells, lines, numbers, directional_cell_matrix, across_clues, down_clues):
     cell_output = []
 
     row_length = len(directional_cell_matrix)
@@ -560,6 +577,17 @@ def extract_clues(cluesfile, across_clues, down_clues):
         elif mode == "down":
             down_clues.append(line)
 
+def label_clues_list(across_clues, down_clues):
+    labelled_across = []
+    labelled_down = []
+    assert(isinstance(across_clues, list))
+    assert(isinstance(down_clues, list))
+    for a in across_clues:
+        labelled_across.append(f'{a}a')
+    for d in down_clues: 
+        labelled_down.append(f'{d}d')
+
+    return labelled_across, labelled_down
 
 def main():
     if len(sys.argv) != 4:
@@ -592,7 +620,10 @@ def main():
 
     cell_matrix = create_cell_matrix(cells, width, height)
     numbered_cell_matrix, heads, across_clues, down_clues = number_cell_matrix(cell_matrix, numbers)
-    dir_cell_matrix = directional_cell_matrix(numbered_cell_matrix, heads, across_clues, down_clues)
+    labelled_across, labelled_down = label_clues_list(across_clues, down_clues)
+    dir_cell_matrix = directional_cell_matrix(numbered_cell_matrix, heads, across_clues, down_clues, labelled_across, labelled_down)
+
+    # To be used in js for next clue detection
 
     output = []
 
@@ -604,7 +635,7 @@ def main():
 
     # Crosswsord grid
     output.append(cell_preamble)
-    output.extend(generate_cells(cells, lines, numbers, dir_cell_matrix))
+    output.extend(generate_cells(cells, lines, numbers, dir_cell_matrix, across_clues, down_clues))
 
     # Down clues
     output.extend(down_clues_generator(down_clues_list))
