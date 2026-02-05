@@ -425,8 +425,7 @@ def number_cell_matrix(cell_matrix, numbers):
 def directional_cell_matrix(cell_matrix, heads, across_clues, down_clues):
     max_row = len(cell_matrix) - 1
     max_col = len(cell_matrix[0]) - 1
-    print(across_clues)
-    print(down_clues)
+
     # every cell in heads is a beginning
     for head in heads:
         for clue in head.clue_number:
@@ -509,14 +508,21 @@ def generate_cells(cells, lines, numbers, directional_cell_matrix):
     cell_output.append(f'</div></div></div>')
     return cell_output
 
+#
+# Clues helper functions
+#
+
 def across_clues_generator(across_clues):
     across_clues_ = []
     across_clues_.append(f'<div class="clues-column", style="padding-left: 3%">')
     across_clues_.append(f'<h3>Across</h3>')
 
-    for clue in across_clues:
-        clue = f'<div>{clue}</div>'
-        across_clues_.append(clue)
+    for c in range(len(across_clues)):
+        clue = across_clues[c]
+        split = clue.split('.')
+        clue_num = int(split[0])
+        clue_ = f'<div class="clue" data-clue="{clue_num}a">{clue}</div>'
+        across_clues_.append(clue_)
 
     across_clues_.append(f'</div>')
     return across_clues_
@@ -525,29 +531,21 @@ def down_clues_generator(down_clues):
     down_clues_ = []
     down_clues_.append(f'<div class="clues-column">')
     down_clues_.append(f'<h3>Down</h3>')
-    for clue in down_clues:
-        clue = f'<div>{clue}</div>'
-        down_clues_.append(clue)
+
+    for c in range(len(down_clues)):
+        clue = down_clues[c]
+        split = clue.split('.')
+        clue_num = int(split[0])
+        clue_ = f'<div class="clue", data-clue="{clue_num}d">{clue}</div>'
+        down_clues_.append(clue_)
     down_clues_.append(f'</div>')
 
     return down_clues_
 
-
-def main():
-    if len(sys.argv) != 4:
-        print("Usage: python htmlconvert.py input.html clues.txt output.html")
-        sys.exit(1)
-
-    infile = sys.argv[1]
-    cluesfile = sys.argv[2]
-    outfile = sys.argv[3]
-
-    across_clues = []
-    down_clues = []
-
+def extract_clues(cluesfile, across_clues, down_clues):
     with open(cluesfile, "r", encoding="utf-8") as f:
         lines = [line.strip() for line in f if line.strip()]  # remove empty lines
-
+    
     mode = None  # None, "across", or "down"
     for line in lines:
         if line.lower() == "across":
@@ -562,6 +560,22 @@ def main():
         elif mode == "down":
             down_clues.append(line)
 
+
+def main():
+    if len(sys.argv) != 4:
+        print("Usage: python htmlconvert.py input.html clues.txt output.html")
+        sys.exit(1)
+
+    infile = sys.argv[1]
+    cluesfile = sys.argv[2]
+    outfile = sys.argv[3]
+
+    across_clues = []
+    down_clues = []
+    across_clues_list = []
+    down_clues_list = []
+
+    extract_clues(cluesfile, across_clues_list, down_clues_list)
 
     with open(infile, "r", encoding="utf-8") as f:
         soup = BeautifulSoup(f.read(), "lxml")
@@ -586,14 +600,14 @@ def main():
     output.append(html_preamble)
 
     # Across clues
-    output.extend(across_clues_generator(across_clues))
+    output.extend(across_clues_generator(across_clues_list))
 
     # Crosswsord grid
     output.append(cell_preamble)
     output.extend(generate_cells(cells, lines, numbers, dir_cell_matrix))
 
     # Down clues
-    output.extend(down_clues_generator(down_clues))
+    output.extend(down_clues_generator(down_clues_list))
 
     output.append(f'</div>')
     output.append(f'</center>')
