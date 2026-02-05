@@ -160,184 +160,239 @@ cell_preamble = r"""<div class="crossword-grid">
 <div style="border-width:0px;width:541px;height:541px;position:relative;">
 <div style="border-width:0px;top:0px;left:0px;width:541px;height:541px;position:absolute;">"""
 
-javascript_postamble = r"""<script>
-// Store data in memory instead of localStorage
-const cellData = {};
+def javascript_postamble(labelled_across, labelled_down):
+  vars = f"""
+  let currentClue = '{labelled_across[0]}';
+  let labelled_across = {labelled_across};
+  let labelled_down = {labelled_down};
+  """
 
-// Set initial current direction
-let currentDirection = 'across';
+  script = r"""<script>
+  // Store data in memory instead of localStorage
+  const cellData = {};
 
-function genNextCell(allCells, cell, curDirection) {
-  const thisLeft = parseInt(cell.style.left);
-  const thisTop = parseInt(cell.style.top);
-  
-  if (curDirection === 'across') {
-    const rowCells = allCells
-      .filter(c => Math.abs(parseInt(c.style.top) - thisTop) < 5)
-      .sort((a, b) => parseInt(a.style.left) - parseInt(b.style.left));
+  // Set initial current direction
+  let currentDirection = 'across';""" 
 
-    for (let c of rowCells) {
-      if (parseInt(c.style.left) > thisLeft) return c;
+  post_script = r"""
+  function genNextCell(allCells, cell, direction) {
+    const thisLeft = parseInt(cell.style.left);
+    const thisTop = parseInt(cell.style.top);
+
+    let next;
+    if (direction === 'across') {
+      // 1. Look for the cell immediately to the right (within 40px/standard grid size)
+      next = allCells.find(c => 
+        Math.abs(parseInt(c.style.top) - thisTop) < 5 && 
+        parseInt(c.style.left) > thisLeft && 
+        parseInt(c.style.left) <= thisLeft + 40 // Adjust 40 to your cell width
+      );
+    } else {
+      // 2. Look for the cell immediately below (within 40px)
+      next = allCells.find(c => 
+        Math.abs(parseInt(c.style.left) - thisLeft) < 5 && 
+        parseInt(c.style.top) > thisTop && 
+        parseInt(c.style.top) <= thisTop + 40 // Adjust 40 to your cell height
+      );
     }
-  } else if (curDirection === 'down') {
-    // Find next cell in same column, below
-    const colCells = allCells
-      .filter(c => Math.abs(parseInt(c.style.left) - thisLeft) < 5)
-      .sort((a, b) => parseInt(a.style.top) - parseInt(b.style.top));
 
-    for (let c of colCells) {
-      if (parseInt(c.style.top) > thisTop) return c;
+    // 3. If no physical neighbor exists, ONLY THEN jump to the next numerical clue
+    if (!next) {
+      const nextClueId = getAndSetNextClue(cell);
+      return getHeadCell(nextClueId);
     }
+
+    return next;
   }
 
-  return null;
-}
-
-function genPrevCell(allCells, cell, direction) {
-  const thisLeft = parseInt(cell.style.left);
-  const thisTop = parseInt(cell.style.top);
-
-  if (direction === 'across') {
-    // same row, to the left
-    const rowCells = allCells
-      .filter(c => Math.abs(parseInt(c.style.top) - thisTop) < 5)
-      .sort((a, b) => parseInt(a.style.left) - parseInt(b.style.left));
-
-    for (let i = rowCells.length - 1; i >= 0; i--) {
-      if (parseInt(rowCells[i].style.left) < thisLeft) {
-        return rowCells[i];
-      }
+  function getAndSetNextClue(curCell) {
+    let next;
+    // Use camelCase to match data-next-a-clue
+    if (currentDirection === 'across') {
+      next = curCell.dataset.nextAClue;
+    } else {
+      next = curCell.dataset.nextDClue;
     }
-  }
 
-  if (direction === 'down') {
-    // same column, above
-    const colCells = allCells
-      .filter(c => Math.abs(parseInt(c.style.left) - thisLeft) < 5)
-      .sort((a, b) => parseInt(a.style.top) - parseInt(b.style.top));
-
-    for (let i = colCells.length - 1; i >= 0; i--) {
-      if (parseInt(colCells[i].style.top) < thisTop) {
-        return colCells[i];
-      }
-    }
-  }
-  return null;
-}
-
-
-// Get all input cells and set up event listeners
-const cells = document.querySelectorAll('input.cell');
-cells.forEach((cell, index) => {
-  const key = 'cell_' + index;
-  
-  // Restore value from memory if it exists
-  if (cellData[key]) {
-    cell.value = cellData[key];
-  }
-  
-  // Save input to memory and auto-uppercase
-  cell.addEventListener('input', (e) => {
-    e.target.value = e.target.value.toUpperCase(); // optional uppercase
-
-    // only move if the cell is filled
-    if (cell.value.length >= cell.maxLength) {
-      const allCells = Array.from(cells);
-      const i = allCells.indexOf(cell);
-      let nextCell = null;
-
+    // Handle "None" or end of list
+    if (!next || next === 'None') {
       if (currentDirection === 'across') {
-        nextCell = allCells[i + 1]; // move right
-      } else { // down
-        const thisLeft = parseInt(cell.style.left);
-        const thisTop = parseInt(cell.style.top);
-        nextCell = allCells.find(c =>
-          parseInt(c.style.left) === thisLeft && parseInt(c.style.top) > thisTop
-        );
+        currentDirection = 'down';
+        next = labelled_down[0];
+      } else {
+        currentDirection = 'across';
+        next = labelled_across[0];
+      }
+    }
+    
+    currentClue = next;
+    return next;
+  }
+
+  function getHeadCell(clue_num) {
+    const cells = document.querySelectorAll('input.cell');
+    const matchingCells = Array.from(cells).filter(c => 
+      c.dataset.clue.includes(clue_num)
+    );
+    
+    if (matchingCells.length === 0) return null;
+    
+    // Sort by top first, then by left (top-leftmost)
+    matchingCells.sort((a, b) => {
+      const topDiff = parseInt(a.style.top) - parseInt(b.style.top);
+      if (topDiff !== 0) return topDiff;
+      return parseInt(a.style.left) - parseInt(b.style.left);
+    });
+    
+    return matchingCells[0];
+  }
+
+  function genPrevCell(allCells, cell, direction) {
+    const thisLeft = parseInt(cell.style.left);
+    const thisTop = parseInt(cell.style.top);
+
+    if (direction === 'across') {
+      // same row, to the left
+      const rowCells = allCells
+        .filter(c => Math.abs(parseInt(c.style.top) - thisTop) < 5)
+        .sort((a, b) => parseInt(a.style.left) - parseInt(b.style.left));
+
+      for (let i = rowCells.length - 1; i >= 0; i--) {
+        if (parseInt(rowCells[i].style.left) < thisLeft) {
+          return rowCells[i];
+        }
+      }
+    }
+
+    if (direction === 'down') {
+      // same column, above
+      const colCells = allCells
+        .filter(c => Math.abs(parseInt(c.style.left) - thisLeft) < 5)
+        .sort((a, b) => parseInt(a.style.top) - parseInt(b.style.top));
+
+      for (let i = colCells.length - 1; i >= 0; i--) {
+        if (parseInt(colCells[i].style.top) < thisTop) {
+          return colCells[i];
+        }
+      }
+    }
+    return null;
+  }
+
+
+  // Get all input cells and set up event listeners
+  const cells = document.querySelectorAll('input.cell');
+  cells.forEach((cell, index) => {
+    const key = 'cell_' + index;
+    
+    // Restore value from memory if it exists
+    if (cellData[key]) {
+      cell.value = cellData[key];
+    }
+    
+    // Save input to memory and auto-uppercase
+    cell.addEventListener('input', (e) => {
+      e.target.value = e.target.value.toUpperCase(); // optional uppercase
+
+      // only move if the cell is filled
+      if (cell.value.length >= cell.maxLength) {
+        const allCells = Array.from(cells);
+        const i = allCells.indexOf(cell);
+        let nextCell = null;
+
+        if (currentDirection === 'across') {
+          nextCell = allCells[i + 1]; // move right
+        } else { // down
+          const thisLeft = parseInt(cell.style.left);
+          const thisTop = parseInt(cell.style.top);
+          nextCell = allCells.find(c =>
+            parseInt(c.style.left) === thisLeft && parseInt(c.style.top) > thisTop
+          );
+        }
+
+        if (nextCell) nextCell.focus();
+      }
+    });
+
+    cell.addEventListener('focus', () => {
+      cells.forEach(c => c.classList.remove('active'));
+
+      const clues = cell.dataset.clue.split(',').map(s => s.trim());
+
+      // If current direction not available, auto-switch
+      if (
+        currentDirection === 'across' &&
+        !clues.some(c => c.endsWith('a'))
+      ) {
+        currentDirection = 'down';
+      }
+      if (
+        currentDirection === 'down' &&
+        !clues.some(c => c.endsWith('d'))
+      ) {
+        currentDirection = 'across';
       }
 
-      if (nextCell) nextCell.focus();
-    }
-  });
+      const activeClue =
+        currentDirection === 'down'
+          ? clues.find(c => c.endsWith('d'))
+          : clues.find(c => c.endsWith('a'));
 
-  cell.addEventListener('focus', () => {
-    cells.forEach(c => c.classList.remove('active'));
-
-    const clues = cell.dataset.clue.split(',').map(s => s.trim());
-
-    // If current direction not available, auto-switch
-    if (
-      currentDirection === 'across' &&
-      !clues.some(c => c.endsWith('a'))
-    ) {
-      currentDirection = 'down';
-    }
-    if (
-      currentDirection === 'down' &&
-      !clues.some(c => c.endsWith('d'))
-    ) {
-      currentDirection = 'across';
-    }
-
-    const activeClue =
-      currentDirection === 'down'
-        ? clues.find(c => c.endsWith('d'))
-        : clues.find(c => c.endsWith('a'));
-
-    cells.forEach(c => {
-      const cClues = c.dataset.clue.split(',').map(s => s.trim());
-      if (cClues.includes(activeClue)) {
-        c.classList.add('active');
+      cells.forEach(c => {
+        const cClues = c.dataset.clue.split(',').map(s => s.trim());
+        if (cClues.includes(activeClue)) {
+          c.classList.add('active');
+        }
+      });
+    });
+    
+    // Navigate between cells with arrow keys
+    cell.addEventListener('keydown', (e) => {
+      e.target.value = e.target.value.toUpperCase();
+      const allCells = Array.from(cells);
+      const currentIndex = allCells.indexOf(cell);
+      
+      let nextCell = null;
+      
+      switch(e.key) {
+        case ' ':
+          e.preventDefault();
+          currentDirection = currentDirection === 'across' ? 'down' : 'across';
+          cell.blur();
+          cell.focus(); // re-trigger highlighting
+          return;
+        
+        case 'Enter':
+          e.preventDefault();
+          nextCell = genNextCell(allCells, cell, currentDirection);
+          break
+        case 'ArrowRight':
+          nextCell = genNextCell(allCells, cell, 'across');
+          break;
+        case 'ArrowLeft':
+          nextCell = genPrevCell(allCells, cell, 'across');
+          break;
+        case 'ArrowDown':
+          nextCell = genNextCell(allCells, cell, 'down');
+          break;
+        case 'ArrowUp':
+          nextCell = genPrevCell(allCells, cell, 'down');
+          break;
+        case 'Delete':
+        case 'Backspace':
+          cell.value = ''
+          nextCell = genPrevCell(allCells, cell, currentDirection)
+        }
+      
+      if (nextCell && ['Enter', 'ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown', 'Delete', 'Backspace'].includes(e.key)) {
+        e.preventDefault();
+        nextCell.focus();
       }
     });
   });
-  
-  // Navigate between cells with arrow keys
-  cell.addEventListener('keydown', (e) => {
-    e.target.value = e.target.value.toUpperCase();
-    const allCells = Array.from(cells);
-    const currentIndex = allCells.indexOf(cell);
-    
-    let nextCell = null;
-    
-    switch(e.key) {
-      case ' ':
-        e.preventDefault();
-        currentDirection = currentDirection === 'across' ? 'down' : 'across';
-        cell.blur();
-        cell.focus(); // re-trigger highlighting
-        return;
-      
-      case 'Enter':
-        e.preventDefault();
-        nextCell = genNextCell(allCells, cell, currentDirection);
-        break
-      case 'ArrowRight':
-        nextCell = genNextCell(allCells, cell, 'across');
-        break;
-      case 'ArrowLeft':
-        nextCell = genPrevCell(allCells, cell, 'across');
-        break;
-      case 'ArrowDown':
-        nextCell = genNextCell(allCells, cell, 'down');
-        break;
-      case 'ArrowUp':
-        nextCell = genPrevCell(allCells, cell, 'down');
-        break;
-      case 'Delete':
-      case 'Backspace':
-        cell.value = ''
-        nextCell = genPrevCell(allCells, cell, currentDirection)
-      }
-    
-    if (nextCell && ['Enter', 'ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown', 'Delete', 'Backspace'].includes(e.key)) {
-      e.preventDefault();
-      nextCell.focus();
-    }
-  });
-});
-</script>
-"""
+  </script>
+  """
+  return script + vars + post_script
 
 # HELPER FUNCTIONS
 # Helper function to extract top and left from style to use in cell generation
@@ -397,10 +452,10 @@ def number_cell_matrix(cell_matrix, numbers):
         max_row = len(cell_matrix) - 1
         max_col = len(cell_matrix[0]) - 1
 
-        # Add across and down information
+        # Add across and down information FOR HEADS
         if (
-            row == 0 or 
-            col == max_col or 
+            (row == 0 and not Cell.is_black(cell_matrix[row + 1][col])) or 
+            (col == max_col and not Cell.is_black(cell_matrix[row + 1][col])) or 
             (row < max_row - 1 and (Cell.is_black(cell_matrix[row-1][col])) and not Cell.is_black(cell_matrix[row + 1][col])) # Cell.is_black(cell_matrix[row][col+1]) and Cell.is_black(cell_matrix[row][col-1]))
             ):
             cur.is_down = True
@@ -432,8 +487,6 @@ def get_next_clue(curClue, list):
 def directional_cell_matrix(cell_matrix, heads, across_clues, down_clues, labelled_across, labelled_down):
     max_row = len(cell_matrix) - 1
     max_col = len(cell_matrix[0]) - 1
-    print(down_clues)
-    print(heads)
 
     # every cell in heads is a beginning
     for head in heads:
@@ -455,7 +508,6 @@ def directional_cell_matrix(cell_matrix, heads, across_clues, down_clues, labell
                         curr.is_down = True
                         curr.next_down_clue = f"{next_clue}d"
                         curr_row += 1
-                print(curr.next_down_clue)
             
             if 'a' in clue:
                 curr_col = head.col + 1
@@ -644,7 +696,7 @@ def main():
     output.append(f'</center>')
 
     # Postamble
-    output.append(javascript_postamble)
+    output.append(javascript_postamble(labelled_across, labelled_down))
     output.append("</body> \n</html>")
 
     with open(outfile, "w", encoding="utf-8") as f:
