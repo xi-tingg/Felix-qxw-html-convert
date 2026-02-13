@@ -111,28 +111,65 @@ input.cell:focus {
 }
 
 .crossword-wrapper {
+    height: 60vh;
     display: flex;
     justify-content: center;
-    align-items: flex-start;
-    gap: 40px;
-    margin: 0 auto;
+    align-items: flex-center;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+.crossword-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#clue-display {
+    background: #f0f0f0;
     padding: 10px;
+    margin-bottom: 10px;
+    font-weight: bold;
+    border-left: 5px solid #333;
+    height: 10vh;
+    width: 541px; /* Same width as crossword grid */
+    overflow-y: auto;
+    display: flex;
+    align-items: center;
     box-sizing: border-box;
 }
 
 .clues-column {
+    flex: 1;
+    max-width: 400px;
     display: flex;
     flex-direction: column;
     width: auto;
     font-family: Arial, sans-serif;
+    overflow: hidden;
+}
+
+.clues-section {
+    height: 30vh;
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    padding: 20px;
+    box-sizing: border-box;
 }
 
 .clues-column h3 {
     text-align: center;
-    margin-bottom: 10px;
+    margin: 0 0 10px 0;
     font-weight: bold;
     border-bottom: 1px solid #333;
     padding-bottom: 5px;
+    flex-shrink: 0;
+}
+
+.clues-list {
+    overflow-y: auto;
+    flex: 1;
 }
 
 .clues-column div {
@@ -140,93 +177,99 @@ input.cell:focus {
     /* border-bottom: 1px dotted #ccc; */
 }
 
+.clues-list .clue {
+    padding: 6px 0;
+}
+
 .crossword-grid {
-    width: 500px;
+    width: 541px;
 }
 
 .cell.active {
   background-color: #ffe58a;
 }
 
+#clue-display {
+    background: #f0f0f0;
+    padding: 10px;
+    margin-bottom: 10px;
+    font-weight: bold;
+    border-left: 5px solid #333;
+    height: 60px;
+    width: 100%;
+    overflow-y: auto;
+    display: flex;
+    align-items: center;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.body {
+  margin: 0;
+  padding: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
 </style>
 </head>
 <body>
 <center>
-
-<div class="crossword-wrapper">
+<div class="container">
     """
 
-cell_preamble = r"""<div class="crossword-grid">
-<div style="border-width:0px;width:541px;height:541px;position:relative;">
-<div style="border-width:0px;top:0px;left:0px;width:541px;height:541px;position:absolute;">"""
 
-def javascript_postamble(labelled_across, labelled_down):
+def javascript_postamble(labelled_across, labelled_down, cluesFile):
   vars = f"""
   let currentClue = '{labelled_across[0]}';
   let labelled_across = {labelled_across};
   let labelled_down = {labelled_down};
   """
 
-  script = r"""<script>
+  cluesMap = generate_clue_map(cluesFile)
+
+  script = r"""
+  </div>
+  </center>
+  <script>
   // Store data in memory instead of localStorage
   const cellData = {};
 
+  // Highlight colors
+  const HIGHLIGHT_COLOR = '\#fffac2';
+  const HOVER_COLOR = '\#f5f5f5';
+
   // Set initial current direction
-  let currentDirection = 'across';""" 
+  """ 
 
   post_script = r"""
-  function genNextCell(allCells, cell, direction) {
-    const thisLeft = parseInt(cell.style.left);
-    const thisTop = parseInt(cell.style.top);
-
-    let next;
-    if (direction === 'across') {
-      // 1. Look for the cell immediately to the right (within 40px/standard grid size)
-      next = allCells.find(c => 
-        Math.abs(parseInt(c.style.top) - thisTop) < 5 && 
-        parseInt(c.style.left) > thisLeft && 
-        parseInt(c.style.left) <= thisLeft + 40 // Adjust 40 to your cell width
-      );
-    } else {
-      // 2. Look for the cell immediately below (within 40px)
-      next = allCells.find(c => 
-        Math.abs(parseInt(c.style.left) - thisLeft) < 5 && 
-        parseInt(c.style.top) > thisTop && 
-        parseInt(c.style.top) <= thisTop + 40 // Adjust 40 to your cell height
-      );
+  function updateClueDisplay(clueId) {
+    const display = document.getElementById('clue-display');
+    if (display && clueTexts[clueId]) {
+      const direction = clueId.endsWith('a') ? 'ACROSS' : 'DOWN';
+      display.innerHTML = `<strong>${direction}</strong> — ${clueTexts[clueId]}`;
     }
-
-    // 3. If no physical neighbor exists, ONLY THEN jump to the next numerical clue
-    if (!next) {
-      const nextClueId = getAndSetNextClue(cell);
-      return getHeadCell(nextClueId);
-    }
-
-    return next;
   }
 
-  function getAndSetNextClue(curCell) {
-    let next;
-    // Use camelCase to match data-next-a-clue
-    if (currentDirection === 'across') {
-      next = curCell.dataset.nextAClue;
-    } else {
-      next = curCell.dataset.nextDClue;
-    }
-
-    // Handle "None" or end of list
-    if (!next || next === 'None') {
-      if (currentDirection === 'across') {
-        currentDirection = 'down';
-        next = labelled_down[0];
-      } else {
-        currentDirection = 'across';
-        next = labelled_across[0];
-      }
-    }
+  function highlightClueInSidebar(clueId) {
+    // Remove all previous highlights
+    document.querySelectorAll('.clue').forEach(el => {
+      el.style.backgroundColor = '';
+      el.style.fontWeight = '';
+    });
     
-    currentClue = next;
-    return next;
+    // Highlight the active clue
+    const clueElement = document.querySelector(`.clue[data-clue="${clueId}"]`);
+    if (clueElement) {
+      clueElement.style.backgroundColor = HIGHLIGHT_COLOR;
+      clueElement.style.fontWeight = 'bold';
+      // Scroll into view smoothly
+      clueElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
   }
 
   function getHeadCell(clue_num) {
@@ -247,12 +290,60 @@ def javascript_postamble(labelled_across, labelled_down):
     return matchingCells[0];
   }
 
+  function genNextCell(allCells, cell, direction) {
+    const thisLeft = parseInt(cell.style.left);
+    const thisTop = parseInt(cell.style.top);
+
+    let next;
+    if (direction === 'across') {
+      next = allCells.find(c => 
+        Math.abs(parseInt(c.style.top) - thisTop) < 5 && 
+        parseInt(c.style.left) > thisLeft && 
+        parseInt(c.style.left) <= thisLeft + 40
+      );
+    } else {
+      next = allCells.find(c => 
+        Math.abs(parseInt(c.style.left) - thisLeft) < 5 && 
+        parseInt(c.style.top) > thisTop && 
+        parseInt(c.style.top) <= thisTop + 40
+      );
+    }
+
+    if (!next) {
+      const nextClueId = getAndSetNextClue(cell);
+      return getHeadCell(nextClueId);
+    }
+
+    return next;
+  }
+
+  function getAndSetNextClue(curCell) {
+    let next;
+    if (currentDirection === 'across') {
+      next = curCell.dataset.nextAClue;
+    } else {
+      next = curCell.dataset.nextDClue;
+    }
+
+    if (!next || next === 'None') {
+      if (currentDirection === 'across') {
+        currentDirection = 'down';
+        next = labelled_down[0];
+      } else {
+        currentDirection = 'across';
+        next = labelled_across[0];
+      }
+    }
+    
+    currentClue = next;
+    return next;
+  }
+
   function genPrevCell(allCells, cell, direction) {
     const thisLeft = parseInt(cell.style.left);
     const thisTop = parseInt(cell.style.top);
 
     if (direction === 'across') {
-      // same row, to the left
       const rowCells = allCells
         .filter(c => Math.abs(parseInt(c.style.top) - thisTop) < 5)
         .sort((a, b) => parseInt(a.style.left) - parseInt(b.style.left));
@@ -265,7 +356,6 @@ def javascript_postamble(labelled_across, labelled_down):
     }
 
     if (direction === 'down') {
-      // same column, above
       const colCells = allCells
         .filter(c => Math.abs(parseInt(c.style.left) - thisLeft) < 5)
         .sort((a, b) => parseInt(a.style.top) - parseInt(b.style.top));
@@ -279,6 +369,49 @@ def javascript_postamble(labelled_across, labelled_down):
     return null;
   }
 
+  function setActiveClue(cell) {
+    // Clear ALL highlights from grid cells
+    const cells = document.querySelectorAll('input.cell');
+    cells.forEach(c => {
+      c.classList.remove('active');
+      c.style.backgroundColor = '';
+      c.style.fontWeight = '';
+    });
+
+    const clues = cell.dataset.clue.split(',').map(s => s.trim());
+
+    // Determine which clue should be active based on current direction
+    let activeClue;
+    if (currentDirection === 'across') {
+      activeClue = clues.find(c => c.endsWith('a'));
+      if (!activeClue) {
+        activeClue = clues.find(c => c.endsWith('d'));
+        currentDirection = 'down';
+      }
+    } else {
+      activeClue = clues.find(c => c.endsWith('d'));
+      if (!activeClue) {
+        activeClue = clues.find(c => c.endsWith('a'));
+        currentDirection = 'across';
+      }
+    }
+
+    if (activeClue) {
+      currentClue = activeClue;
+      
+      // Highlight all cells in this clue using inline styles
+      cells.forEach(c => {
+        const cClues = c.dataset.clue.split(',').map(s => s.trim());
+        if (cClues.some(clue => clue === activeClue)) {
+          c.style.backgroundColor = HIGHLIGHT_COLOR;
+        }
+      });
+      
+      // Update clue display and sidebar
+      updateClueDisplay(activeClue);
+      highlightClueInSidebar(activeClue);
+    }
+  }
 
   // Get all input cells and set up event listeners
   const cells = document.querySelectorAll('input.cell');
@@ -292,107 +425,160 @@ def javascript_postamble(labelled_across, labelled_down):
     
     // Save input to memory and auto-uppercase
     cell.addEventListener('input', (e) => {
-      e.target.value = e.target.value.toUpperCase(); // optional uppercase
+      const oldValue = e.target.value;
+      e.target.value = e.target.value.toUpperCase();
+      cellData[key] = e.target.value;
 
-      // only move if the cell is filled
-      if (cell.value.length >= cell.maxLength) {
+      // Auto-advance on input (NYT style)
+      if (e.target.value.length >= e.target.maxLength && e.target.value !== oldValue) {
         const allCells = Array.from(cells);
-        const i = allCells.indexOf(cell);
-        let nextCell = null;
-
-        if (currentDirection === 'across') {
-          nextCell = allCells[i + 1]; // move right
-        } else { // down
-          const thisLeft = parseInt(cell.style.left);
-          const thisTop = parseInt(cell.style.top);
-          nextCell = allCells.find(c =>
-            parseInt(c.style.left) === thisLeft && parseInt(c.style.top) > thisTop
-          );
+        const nextCell = genNextCell(allCells, cell, currentDirection);
+        if (nextCell) {
+          setTimeout(() => nextCell.focus(), 10);
         }
-
-        if (nextCell) nextCell.focus();
       }
     });
 
-    cell.addEventListener('focus', () => {
-      cells.forEach(c => c.classList.remove('active'));
-
+    // Click to focus and set direction
+    cell.addEventListener('click', (e) => {
       const clues = cell.dataset.clue.split(',').map(s => s.trim());
-
-      // If current direction not available, auto-switch
-      if (
-        currentDirection === 'across' &&
-        !clues.some(c => c.endsWith('a'))
-      ) {
-        currentDirection = 'down';
+      
+      // NYT behavior: if clicking on already focused cell with multiple clues, toggle direction
+      if (document.activeElement === cell && clues.length > 1) {
+        currentDirection = currentDirection === 'across' ? 'down' : 'across';
       }
-      if (
-        currentDirection === 'down' &&
-        !clues.some(c => c.endsWith('d'))
-      ) {
-        currentDirection = 'across';
-      }
+      
+      // ALWAYS clear and re-highlight, even if already focused
+      setActiveClue(cell);
+    });
 
-      const activeClue =
-        currentDirection === 'down'
-          ? clues.find(c => c.endsWith('d'))
-          : clues.find(c => c.endsWith('a'));
-
-      cells.forEach(c => {
-        const cClues = c.dataset.clue.split(',').map(s => s.trim());
-        if (cClues.includes(activeClue)) {
-          c.classList.add('active');
-        }
-      });
+    cell.addEventListener('focus', () => {
+      setActiveClue(cell);
     });
     
     // Navigate between cells with arrow keys
     cell.addEventListener('keydown', (e) => {
-      e.target.value = e.target.value.toUpperCase();
       const allCells = Array.from(cells);
-      const currentIndex = allCells.indexOf(cell);
-      
       let nextCell = null;
       
       switch(e.key) {
         case ' ':
           e.preventDefault();
-          currentDirection = currentDirection === 'across' ? 'down' : 'across';
-          cell.blur();
-          cell.focus(); // re-trigger highlighting
+          // Toggle direction
+          const clues = cell.dataset.clue.split(',').map(s => s.trim());
+          if (clues.length > 1) {
+            currentDirection = currentDirection === 'across' ? 'down' : 'across';
+            setActiveClue(cell);
+          }
           return;
+        
+        case 'Tab':
+          e.preventDefault();
+          if (e.shiftKey) {
+            // Go to previous clue
+            const clueList = currentDirection === 'across' ? labelled_across : labelled_down;
+            const currentIndex = clueList.indexOf(currentClue);
+            const prevClue = currentIndex > 0 ? clueList[currentIndex - 1] : clueList[clueList.length - 1];
+            nextCell = getHeadCell(prevClue);
+            currentClue = prevClue;
+          } else {
+            // Go to next clue
+            nextClue = getAndSetNextClue(cell)
+            nextCell = getHeadCell(nextClue);
+          }
+          break;
         
         case 'Enter':
           e.preventDefault();
-          nextCell = genNextCell(allCells, cell, currentDirection);
-          break
+          nextClue = getAndSetNextClue(cell)
+          nextCell = getHeadCell(nextClue);
+          break;
+          
         case 'ArrowRight':
+          e.preventDefault();
           nextCell = genNextCell(allCells, cell, 'across');
+          currentDirection = 'across';
           break;
+          
         case 'ArrowLeft':
+          e.preventDefault();
           nextCell = genPrevCell(allCells, cell, 'across');
+          currentDirection = 'across';
           break;
+          
         case 'ArrowDown':
+          e.preventDefault();
           nextCell = genNextCell(allCells, cell, 'down');
+          currentDirection = 'down';
           break;
+          
         case 'ArrowUp':
+          e.preventDefault();
           nextCell = genPrevCell(allCells, cell, 'down');
+          currentDirection = 'down';
           break;
+          
         case 'Delete':
         case 'Backspace':
-          cell.value = ''
-          nextCell = genPrevCell(allCells, cell, currentDirection)
-        }
+          e.preventDefault();
+          if (cell.value) {
+            // If cell has content, delete it
+            cell.value = '';
+            cellData[key] = '';
+          } else {
+            // If cell is empty, go to previous cell and delete
+            nextCell = genPrevCell(allCells, cell, currentDirection);
+            if (nextCell) {
+              const prevKey = 'cell_' + allCells.indexOf(nextCell);
+              nextCell.value = '';
+              cellData[prevKey] = '';
+            }
+          }
+          break;
+      }
       
-      if (nextCell && ['Enter', 'ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown', 'Delete', 'Backspace'].includes(e.key)) {
-        e.preventDefault();
+      if (nextCell) {
         nextCell.focus();
       }
     });
   });
+
+  // Add click handlers to clue sidebar
+  document.querySelectorAll('.clue').forEach(clueEl => {
+    clueEl.addEventListener('click', () => {
+      const clueId = clueEl.getAttribute('data-clue');
+      if (clueId) {
+        currentDirection = clueId.endsWith('a') ? 'across' : 'down';
+        currentClue = clueId;
+        const headCell = getHeadCell(clueId);
+        if (headCell) {
+          headCell.focus();
+        }
+      }
+    });
+    
+    // Make clues hoverable for better UX
+    clueEl.style.cursor = 'pointer';
+    clueEl.addEventListener('mouseenter', () => {
+      if (!clueEl.style.backgroundColor) {
+        clueEl.style.backgroundColor = HOVER_COLOR;
+      }
+    });
+    clueEl.addEventListener('mouseleave', () => {
+      if (clueEl.style.backgroundColor === HOVER_COLOR) {
+        clueEl.style.backgroundColor = '';
+      }
+    });
+  });
+
+  // Initialize with first cell
+  const firstCell = getHeadCell('1a');
+  if (firstCell) {
+    firstCell.focus();
+  }
   </script>
   """
-  return script + vars + post_script
+  return script + vars + cluesMap + post_script
 
 # HELPER FUNCTIONS
 # Helper function to extract top and left from style to use in cell generation
@@ -539,6 +725,17 @@ def print_cell_matrix(cell_matrix, width=9):
 # Parse cells according to class
 def generate_cells(cells, lines, numbers, directional_cell_matrix, across_clues, down_clues):
     cell_output = []
+    cell_output.append(r"""
+<div class="crossword-section">
+    <div class="crossword-content">
+      <div id="clue-display">
+        Select a square to see the clue
+      </div>
+""")
+    cell_output.append(f'<div class="crossword-grid">')
+    cell_output.append(f'<div style="border-width:0px;width:541px;height:541px;position:relative;">')
+    cell_output.append(f'<div style="border-width:0px;top:0px;left:0px;width:541px;height:541px;position:absolute;">')
+
 
     row_length = len(directional_cell_matrix)
     column_length = len(directional_cell_matrix[0])
@@ -553,12 +750,12 @@ def generate_cells(cells, lines, numbers, directional_cell_matrix, across_clues,
                 if curCell.is_down: d.append("down")
                 direction = ",".join(d)
                 cell_output.append(
-                    f'<input class="cell" data-clue="{clues}" data-direction="{direction}" data-next-a-clue="{curCell.next_across_clue}" data-next-d-clue="{curCell.next_down_clue}" style="left:{Cell.getLeft(curCell)};top:{Cell.getTop(curCell)};" maxlength="1">'
+                    f'<input class="cell" data-clue="{clues}" data-direction="{direction}" data-next-a-clue="{curCell.next_across_clue}" data-next-d-clue="{curCell.next_down_clue}" style="left:{Cell.getLeft(curCell)}px;top:{Cell.getTop(curCell)}px;" maxlength="1">'
                 )
             
             else: 
                 cell_output.append(
-                     f'<div class="bk" style="left:{Cell.getLeft(curCell)};top:{Cell.getTop(curCell)};"></div>'
+                     f'<div class="bk" style="left:{Cell.getLeft(curCell)}px;top:{Cell.getTop(curCell)}px;"></div>'
                 )
 
     for num in numbers:
@@ -574,17 +771,27 @@ def generate_cells(cells, lines, numbers, directional_cell_matrix, across_clues,
     # Default - we only change bk and nu
     cell_output.extend(lines)
 
-    cell_output.append(f'</div></div></div>')
+    cell_output.append(f'</div></div></div></div></div>')
     return cell_output
 
 #
 # Clues helper functions
 #
 
+def clues_section_generator(across_clues, down_clues):
+    clues_section = []
+    clues_section.append(f'<div class="clues-section">')
+    clues_section.extend(across_clues_generator(across_clues))
+    clues_section.extend(down_clues_generator(down_clues))
+    clues_section.append(f'</div>')
+
+    return clues_section
+
 def across_clues_generator(across_clues):
     across_clues_ = []
-    across_clues_.append(f'<div class="clues-column", style="padding-left: 3%">')
+    across_clues_.append(f'<div class="clues-column">')
     across_clues_.append(f'<h3>Across</h3>')
+    across_clues_.append(f'<div class="clues-list">')
 
     for c in range(len(across_clues)):
         clue = across_clues[c]
@@ -594,12 +801,14 @@ def across_clues_generator(across_clues):
         across_clues_.append(clue_)
 
     across_clues_.append(f'</div>')
+    across_clues_.append(f'</div>')
     return across_clues_
 
 def down_clues_generator(down_clues):
     down_clues_ = []
     down_clues_.append(f'<div class="clues-column">')
     down_clues_.append(f'<h3>Down</h3>')
+    down_clues_.append(f'<div class="clues-list">')
 
     for c in range(len(down_clues)):
         clue = down_clues[c]
@@ -607,6 +816,8 @@ def down_clues_generator(down_clues):
         clue_num = int(split[0])
         clue_ = f'<div class="clue", data-clue="{clue_num}d">{clue}</div>'
         down_clues_.append(clue_)
+    down_clues_.append(f'</div>')
+    down_clues_.append(f'</div>')
     down_clues_.append(f'</div>')
 
     return down_clues_
@@ -628,6 +839,52 @@ def extract_clues(cluesfile, across_clues, down_clues):
             across_clues.append(line)
         elif mode == "down":
             down_clues.append(line)
+
+def generate_clue_map(cluesfile):
+  with open(cluesfile, "r", encoding="utf-8") as f:
+      lines = [line.strip() for line in f if line.strip()]
+  
+  across_clues = []
+  down_clues = []
+  mode = None
+  
+  for line in lines:
+      if line.lower() == "across":
+          mode = "across"
+          continue
+      elif line.lower() == "down":
+          mode = "down"
+          continue
+      
+      if mode == "across":
+          across_clues.append(line)
+      elif mode == "down":
+          down_clues.append(line)
+  
+  # Generate JavaScript object
+  js_lines = ["const clueTexts = {"]
+  
+  # Process across clues
+  for clue in across_clues:
+      # Extract number from clue (e.g., "1. Text..." -> "1")
+      clue_num = clue.split('.')[0].strip()
+      # Escape single quotes in the clue text
+      escaped_clue = clue.replace("'", "\\'")
+      js_lines.append(f"  '{clue_num}a': '{escaped_clue}',")
+  
+  # Process down clues
+  for clue in down_clues:
+      clue_num = clue.split('.')[0].strip()
+      escaped_clue = clue.replace("'", "\\'")
+      js_lines.append(f"  '{clue_num}d': '{escaped_clue}',")
+  
+  # Remove trailing comma from last line
+  if js_lines[-1].endswith(','):
+      js_lines[-1] = js_lines[-1][:-1]
+  
+  js_lines.append("};")
+  
+  return '\n'.join(js_lines)
 
 def label_clues_list(across_clues, down_clues):
     labelled_across = []
@@ -682,21 +939,17 @@ def main():
     # Preambles
     output.append(html_preamble)
 
-    # Across clues
-    output.extend(across_clues_generator(across_clues_list))
-
     # Crosswsord grid
-    output.append(cell_preamble)
     output.extend(generate_cells(cells, lines, numbers, dir_cell_matrix, across_clues, down_clues))
 
-    # Down clues
-    output.extend(down_clues_generator(down_clues_list))
+    # Clues generator
+    output.extend(clues_section_generator(across_clues_list, down_clues_list))
 
     output.append(f'</div>')
     output.append(f'</center>')
 
     # Postamble
-    output.append(javascript_postamble(labelled_across, labelled_down))
+    output.append(javascript_postamble(labelled_across, labelled_down, cluesfile))
     output.append("</body> \n</html>")
 
     with open(outfile, "w", encoding="utf-8") as f:
