@@ -226,6 +226,7 @@ input.cell:focus {
 def javascript_postamble(labelled_across, labelled_down, cluesFile):
   vars = f"""
   let currentClue = '{labelled_across[0]}';
+  let currentDirection = 'across';
   let labelled_across = {labelled_across};
   let labelled_down = {labelled_down};
   """
@@ -572,9 +573,10 @@ def javascript_postamble(labelled_across, labelled_down, cluesFile):
   });
 
   // Initialize with first cell
-  const firstCell = getHeadCell('1a');
+  const firstCell = getHeadCell(currentClue);
   if (firstCell) {
     firstCell.focus();
+    setActiveClue(firstCell);
   }
   </script>
   """
