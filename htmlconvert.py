@@ -79,6 +79,7 @@ html_preamble = r"""<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN
 <head>
 <title>Crossword</title>
 <meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style type="text/css">
 div.bk {position:absolute;font-size:0px;border-left:black 0px solid;border-right:black 0px solid;border-top:black 36px solid;border-bottom:black 0px solid;width:36px;height:36px;}
 div.nu {position:absolute;font-size:12px;font-family:sans-serif;width:32px;height:32px;pointer-events:none;z-index:20;}
@@ -111,10 +112,9 @@ input.cell:focus {
 }
 
 .crossword-wrapper {
-    height: 60vh;
     display: flex;
     justify-content: center;
-    align-items: flex-center;
+    align-items: flex-start;
     padding: 20px;
     box-sizing: border-box;
 }
@@ -142,6 +142,7 @@ input.cell:focus {
 .clues-column {
     flex: 1;
     max-width: 400px;
+    max-height: 35vh;
     display: flex;
     flex-direction: column;
     width: auto;
@@ -150,12 +151,12 @@ input.cell:focus {
 }
 
 .clues-section {
-    height: 30vh;
     display: flex;
     justify-content: center;
     gap: 40px;
     padding: 20px;
     box-sizing: border-box;
+    max-height: 35vh;
 }
 
 .clues-column h3 {
@@ -182,7 +183,8 @@ input.cell:focus {
 }
 
 .crossword-grid {
-    width: 541px;
+    /* width set dynamically by scaleGrid() */
+    overflow: visible;
 }
 
 .cell.active {
@@ -205,14 +207,30 @@ input.cell:focus {
 .container {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  min-height: 100vh;
 }
 
-.body {
+body {
   margin: 0;
   padding: 0;
-  height: 100vh;
-  overflow: hidden;
+}
+
+@media (max-width: 600px) {
+  .clues-section {
+    flex-direction: column;
+    max-height: none;
+    gap: 0;
+    padding: 10px;
+  }
+
+  .clues-column {
+    max-width: 100%;
+    max-height: 15vh;
+  }
+
+  .crossword-wrapper {
+    padding: 10px;
+  }
 }
 
 </style>
@@ -251,8 +269,10 @@ def javascript_postamble(labelled_across, labelled_down, cluesFile):
   function updateClueDisplay(clueId) {
     const display = document.getElementById('clue-display');
     if (display && clueTexts[clueId]) {
-      const direction = clueId.endsWith('a') ? 'ACROSS' : 'DOWN';
-      display.innerHTML = `<strong>${direction}</strong> — ${clueTexts[clueId]}`;
+      const direction = clueId.endsWith('a') ? 'A' : 'D';
+      const clueText = clueTexts[clueId];
+      const myArray = clueText.split(". ");
+      display.innerHTML = `<strong>${clueId}</strong>: ${myArray[1]}`;
     }
   }
 
@@ -574,10 +594,34 @@ def javascript_postamble(labelled_across, labelled_down, cluesFile):
 
   // Initialize with first cell
   const firstCell = getHeadCell(currentClue);
-  if (firstCell) {
-    firstCell.focus();
-    setActiveClue(firstCell);
+  firstCell.focus();
+  updateClueDisplay(currentClue);
+  setActiveClue(firstCell);
+
+  function scaleGrid() {
+    const nativeSize = 541;
+    const padding = 32;
+    const available = Math.min(window.innerWidth - padding, nativeSize);
+    const scale = available / nativeSize;
+
+    const gridOuter = document.querySelector('.crossword-grid');
+    if (!gridOuter) return;
+    const innerDiv = gridOuter.querySelector('div');
+    innerDiv.style.transform = `scale(${scale})`;
+    innerDiv.style.transformOrigin = 'top left';
+    gridOuter.style.width = (nativeSize * scale) + 'px';
+    gridOuter.style.height = (nativeSize * scale) + 'px';
+
+    const content = document.querySelector('.crossword-content');
+    if (content) content.style.width = (nativeSize * scale) + 'px';
+
+    const clueDisplay = document.getElementById('clue-display');
+    if (clueDisplay) clueDisplay.style.fontSize = Math.round(15 * scale) + 'px';
   }
+
+  scaleGrid();
+  window.addEventListener('resize', scaleGrid);
+
   </script>
   """
   return script + vars + cluesMap + post_script
@@ -651,8 +695,8 @@ def number_cell_matrix(cell_matrix, numbers):
             down_clues.append(int(number))
 
         if (
-            col == 0 or
-            row == max_row or
+            (col == 0 and not Cell.is_black(cell_matrix[row][col+ 1])) or
+            (row == max_row and not Cell.is_black(cell_matrix[row][col + 1])) or
             (col < max_col - 1 and (Cell.is_black(cell_matrix[row][col - 1])) and not Cell.is_black(cell_matrix[row][col+1])) # Cell.is_black(cell_matrix[row+1][col]) and Cell.is_black(cell_matrix[row][col-1]))
             ):
             cur.is_across = True
