@@ -182,6 +182,10 @@ input.cell:focus {
     padding: 6px 0;
 }
 
+.clue { cursor: pointer; }
+.clue:hover { background: #f5f5f5; }
+.clue.active { background: #fffac2; font-weight: bold; }
+
 .crossword-grid {
     /* width set dynamically by scaleGrid() */
     overflow: visible;
@@ -258,10 +262,6 @@ def javascript_postamble(labelled_across, labelled_down, cluesFile):
   // Store data in memory instead of localStorage
   const cellData = {};
 
-  // Highlight colors
-  const HIGHLIGHT_COLOR = '\#fffac2';
-  const HOVER_COLOR = '\#f5f5f5';
-
   // Set initial current direction
   """ 
 
@@ -270,24 +270,21 @@ def javascript_postamble(labelled_across, labelled_down, cluesFile):
     const display = document.getElementById('clue-display');
     if (display && clueTexts[clueId]) {
       const direction = clueId.endsWith('a') ? 'A' : 'D';
-      const clueText = clueTexts[clueId];
-      const myArray = clueText.split(". ");
-      display.innerHTML = `<strong>${clueId}</strong>: ${myArray[1]}`;
+      const text = clueTexts[clueId].replace(/^\d+\.\s*/, '');
+      display.innerHTML = `<strong>${clueId}</strong>: ${text}`;
     }
   }
 
   function highlightClueInSidebar(clueId) {
     // Remove all previous highlights
     document.querySelectorAll('.clue').forEach(el => {
-      el.style.backgroundColor = '';
-      el.style.fontWeight = '';
+      el.classlist.remove('active');
     });
     
     // Highlight the active clue
     const clueElement = document.querySelector(`.clue[data-clue="${clueId}"]`);
     if (clueElement) {
-      clueElement.style.backgroundColor = HIGHLIGHT_COLOR;
-      clueElement.style.fontWeight = 'bold';
+      clueElement.classList.add('active');
       // Scroll into view smoothly
       clueElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
@@ -395,8 +392,6 @@ def javascript_postamble(labelled_across, labelled_down, cluesFile):
     const cells = document.querySelectorAll('input.cell');
     cells.forEach(c => {
       c.classList.remove('active');
-      c.style.backgroundColor = '';
-      c.style.fontWeight = '';
     });
 
     const clues = cell.dataset.clue.split(',').map(s => s.trim());
@@ -424,7 +419,7 @@ def javascript_postamble(labelled_across, labelled_down, cluesFile):
       cells.forEach(c => {
         const cClues = c.dataset.clue.split(',').map(s => s.trim());
         if (cClues.some(clue => clue === activeClue)) {
-          c.style.backgroundColor = HIGHLIGHT_COLOR;
+          c.classList.add('active');
         }
       });
       
@@ -581,19 +576,6 @@ def javascript_postamble(labelled_across, labelled_down, cluesFile):
         if (headCell) {
           headCell.focus();
         }
-      }
-    });
-    
-    // Make clues hoverable for better UX
-    clueEl.style.cursor = 'pointer';
-    clueEl.addEventListener('mouseenter', () => {
-      if (!clueEl.style.backgroundColor) {
-        clueEl.style.backgroundColor = HOVER_COLOR;
-      }
-    });
-    clueEl.addEventListener('mouseleave', () => {
-      if (clueEl.style.backgroundColor === HOVER_COLOR) {
-        clueEl.style.backgroundColor = '';
       }
     });
   });

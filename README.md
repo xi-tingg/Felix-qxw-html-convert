@@ -18,4 +18,5 @@ This will generate your interactive crossword as output.html
 * Mini clue box for selected word
 
 ## Future features
-* Optimise for mobile viewers 
+* Skip already filled in cells
+* Optimise for mobile viewers
