@@ -278,7 +278,7 @@ def javascript_postamble(labelled_across, labelled_down, cluesFile):
   function highlightClueInSidebar(clueId) {
     // Remove all previous highlights
     document.querySelectorAll('.clue').forEach(el => {
-      el.classlist.remove('active');
+      el.classList.remove('active');
     });
     
     // Highlight the active clue
@@ -582,9 +582,8 @@ def javascript_postamble(labelled_across, labelled_down, cluesFile):
 
   // Initialize with first cell
   const firstCell = getHeadCell(currentClue);
-  firstCell.focus();
-  updateClueDisplay(currentClue);
   setActiveClue(firstCell);
+  updateClueDisplay(currentClue);
 
   function scaleGrid() {
     const nativeSize = 541;
