@@ -444,19 +444,15 @@ def javascript_postamble(labelled_across, labelled_down, cluesFile):
       cell.value = cellData[key];
     }
     
-    // Save input to memory and auto-uppercase
-    cell.addEventListener('input', (e) => {
-      const oldValue = e.target.value;
-      e.target.value = e.target.value.toUpperCase();
-      cellData[key] = e.target.value;
+    cell.addEventListener('input', () => {
+      // Keep only the last character typed, uppercased (handles overwriting too)
+      const letter = cell.value.slice(-1).toUpperCase();
+      cell.value = /^[A-Z]$/.test(letter) ? letter : '';
+      cellData[key] = cell.value;
 
-      // Auto-advance on input (NYT style)
-      if (e.target.value.length >= e.target.maxLength && e.target.value !== oldValue) {
-        const allCells = Array.from(cells);
-        const nextCell = genNextCell(allCells, cell, currentDirection);
-        if (nextCell) {
-          setTimeout(() => nextCell.focus(), 10);
-        }
+      if (cell.value) {
+        const next = genNextCell(Array.from(cells), cell, currentDirection);
+        if (next) next.focus();
       }
     });
 
@@ -481,6 +477,15 @@ def javascript_postamble(labelled_across, labelled_down, cluesFile):
     cell.addEventListener('keydown', (e) => {
       const allCells = Array.from(cells);
       let nextCell = null;
+
+      if (/^[a-z]$/i.test(e.key) && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        cell.value = e.key.toUpperCase();
+        cellData[key] = cell.value;
+        const next = genNextCell(Array.from(cells), cell, currentDirection);
+        if (next) next.focus();
+        return;
+      }
       
       switch(e.key) {
         case ' ':
@@ -796,7 +801,7 @@ def generate_cells(cells, lines, numbers, directional_cell_matrix, across_clues,
                 if curCell.is_down: d.append("down")
                 direction = ",".join(d)
                 cell_output.append(
-                    f'<input class="cell" data-clue="{clues}" data-direction="{direction}" data-next-a-clue="{curCell.next_across_clue}" data-next-d-clue="{curCell.next_down_clue}" style="left:{Cell.getLeft(curCell)}px;top:{Cell.getTop(curCell)}px;" maxlength="1">'
+                    f'<input class="cell" data-clue="{clues}" data-direction="{direction}" data-next-a-clue="{curCell.next_across_clue}" data-next-d-clue="{curCell.next_down_clue}" style="left:{Cell.getLeft(curCell)}px;top:{Cell.getTop(curCell)}px;">'
                 )
             
             else: 
@@ -860,9 +865,8 @@ def down_clues_generator(down_clues):
         clue = down_clues[c]
         split = clue.split('.')
         clue_num = int(split[0])
-        clue_ = f'<div class="clue", data-clue="{clue_num}d">{clue}</div>'
+        clue_ = f'<div class="clue" data-clue="{clue_num}d">{clue}</div>'
         down_clues_.append(clue_)
-    down_clues_.append(f'</div>')
     down_clues_.append(f'</div>')
     down_clues_.append(f'</div>')
 
@@ -990,9 +994,6 @@ def main():
 
     # Clues generator
     output.extend(clues_section_generator(across_clues_list, down_clues_list))
-
-    output.append(f'</div>')
-    output.append(f'</center>')
 
     # Postamble
     output.append(javascript_postamble(labelled_across, labelled_down, cluesfile))

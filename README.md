@@ -12,10 +12,10 @@ This will generate your interactive crossword as output.html
 
 ## Features
 * Arrrow keys to change focused input cell
-
-## Future features
 * Auto select next input cell
 * Detection of cells that belong to the same word
 * Improve clues display
 * Mini clue box for selected word
+
+## Future features
 * Optimise for mobile viewers 
