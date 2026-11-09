@@ -637,7 +637,9 @@ def javascript_postamble(labelled_across, labelled_down, cluesFile):
 def extract_left_top(style):
     left  = re.search(r'left:(\d+px)', style)
     top   = re.search(r'top:(\d+px)', style)
-    return (left.group(1), top.group(1))
+    if left is None or top is None:
+        raise ValueError(f"Couldn't find left/top in style: {style!r}")
+    return left.group(1), top.group(1)
 
 # Convert left and top to int because both have px suffix
 def convert_left_top_to_int(left, top):
@@ -662,15 +664,17 @@ def top_left_to_row_col(top, left):
 def create_cell_matrix(cells, width, height):
     # cell_matrix = [[0 for x in range(width)] for y in range(height)]
     # left is the col, top is the row
-    cell_matrix = [[0 for x in range(width + 1)] for y in range(height + 1)]
+    
+    # Default every square to black; QXW's cells overwrite these below
+    cell_matrix = [[Cell(r, c, False) for c in range(width + 1)]
+                   for r in range(height + 1)]
     for c in cells:
         style = c.get("style", "")
         left, top = extract_left_top(style)
         l, t = convert_left_top_to_int(left, top)
         col, row = top_left_to_row_col(l, t)
-        is_white = is_white_cell(style)
 
-        cell_matrix[row][col] = Cell(row, col, is_white)
+        cell_matrix[row][col] = Cell(row, col, is_white_cell(style))
 
     return cell_matrix
 
