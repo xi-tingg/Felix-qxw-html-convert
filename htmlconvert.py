@@ -457,15 +457,16 @@ def javascript_postamble(labelled_across, labelled_down, cluesFile):
     });
 
     // Click to focus and set direction
-    cell.addEventListener('click', (e) => {
+    let wasFocused = false;
+    cell.addEventListener('pointerdown', () => {
+      wasFocused = (document.activeElement === cell);
+    });
+
+    cell.addEventListener('click', () => {
       const clues = cell.dataset.clue.split(',').map(s => s.trim());
-      
-      // NYT behavior: if clicking on already focused cell with multiple clues, toggle direction
-      if (document.activeElement === cell && clues.length > 1) {
+      if (wasFocused && clues.length > 1) {
         currentDirection = currentDirection === 'across' ? 'down' : 'across';
       }
-      
-      // ALWAYS clear and re-highlight, even if already focused
       setActiveClue(cell);
     });
 
